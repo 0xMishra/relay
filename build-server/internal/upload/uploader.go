@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
+	"mime"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +26,7 @@ func (bucket Bucket) uploadFile(
 	ctx context.Context,
 	fPath string,
 	fileName string,
+	fileExt string,
 ) error {
 	pId := os.Getenv("PROJECT_ID")
 	bName := os.Getenv("BUCKET_NAME")
@@ -41,14 +42,15 @@ func (bucket Bucket) uploadFile(
 	if readFileErr != nil {
 		return nil
 	}
+	mimetype := mime.TypeByExtension(fileExt)
 
-	mimeType := http.DetectContentType(data)
 	bucketName := bName
 	objectKey := "_output/" + pId + "/" + fileName
 
 	largeBuffer := bytes.NewReader(data)
 	var partMiBs int64 = 10
 
+	// uploading file in small chunks
 	uploader := manager.NewUploader(bucket.S3Client, func(u *manager.Uploader) {
 		u.PartSize = partMiBs * 1024 * 1024
 	})
@@ -56,10 +58,11 @@ func (bucket Bucket) uploadFile(
 		Bucket:      aws.String(bucketName),
 		Key:         aws.String(objectKey),
 		Body:        largeBuffer,
-		ContentType: &mimeType,
+		ContentType: &mimetype,
 	})
 	if err != nil {
 		log.Printf("Error while uploading object to %s. %s\n", bucketName, err)
+		return err
 	}
 
 	fmt.Printf(
@@ -75,6 +78,7 @@ func (bucket Bucket) uploadFile(
 func checkErr(err error) {
 	if err != nil {
 		log.Fatal(err)
+		os.Exit(1)
 	}
 }
 
@@ -118,15 +122,50 @@ func uploadProject(rootDir string) {
 	for _, fp := range filePaths {
 		fArr := strings.Split(fp, "/")
 		fname := fArr[len(fArr)-1]
-		fmt.Println("uploading", fname+"...")
 
-		bucket.uploadFile(context.TODO(), fp, fname)
+		fileExt := filepath.Ext(fp)
+
+		if strings.Contains(fp, "assets") {
+			fname = "assets/" + fname
+		}
+
+		if fname == "index.html" {
+			pId := os.Getenv("PROJECT_ID")
+			updateHTMLPaths(fp, pId)
+		}
+
+		fmt.Println("\n\nuploading", fname+"...")
+
+		bucket.uploadFile(context.TODO(), fp, fname, fileExt)
 
 	}
 }
 
+func updateHTMLPaths(filePath string, pid string) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read index.html: %w", err)
+	}
+
+	// Replace asset paths to include _output/p1
+	updatedContent := strings.ReplaceAll(string(content), "/assets/", "/_output/"+pid+"/assets/")
+
+	updatedContent = strings.ReplaceAll(
+		string(updatedContent),
+		"/vite.svg",
+		"/_output/"+pid+"/vite.svg",
+	)
+
+	err = os.WriteFile(filePath, []byte(updatedContent), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to update index.html: %w", err)
+	}
+
+	return nil
+}
+
 func buildProject(rootDir string) {
-	fmt.Println("building the project...")
+	fmt.Println("\ninstalling packages...")
 
 	// npm install
 	iCmd := exec.Command("npm", "install")
@@ -136,6 +175,8 @@ func buildProject(rootDir string) {
 
 	runICmdErr := iCmd.Run()
 	checkErr(runICmdErr)
+
+	fmt.Println("\nbuilding the project...")
 
 	// npm run build
 	bCmd := exec.Command("npm", "run", "build")
