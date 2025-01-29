@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
@@ -11,45 +11,64 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func checkErr(err error) {
+func checkErr(err error, fatal bool) {
 	if err != nil {
-		fmt.Fprint(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, err)
+		if fatal {
+			os.Exit(1)
+		}
 	}
 }
 
 func main() {
 	err := godotenv.Load()
-	checkErr(err)
+	checkErr(err, true)
 
-	subDomain := ""
+	bucketURL := os.Getenv("BUCKET_URL")
+	if bucketURL == "" {
+		fmt.Fprintln(os.Stderr, "BUCKET_URL not set in environment")
+		os.Exit(1)
+	}
 
-	bUrl := os.Getenv("BUCKET_URL")
+	if !strings.HasSuffix(bucketURL, "/") {
+		bucketURL += "/"
+	}
 
 	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-		subDomain = strings.Split(r.Host, ".")[0]
+		hostParts := strings.Split(r.Host, ".")
+		if len(hostParts) < 1 {
+			http.Error(rw, "Invalid subdomain", http.StatusBadRequest)
+			return
+		}
+		subDomain := hostParts[0]
 
-		target := bUrl + subDomain + "/index.html"
+		target := bucketURL + subDomain + r.URL.Path
+		if r.URL.Path == "/" {
+			target += "index.html"
+		}
 
-		targetUrl, err := url.Parse(target)
-		checkErr(err)
-
-		r.URL.Host = targetUrl.Host
-		r.URL.Scheme = targetUrl.Scheme
-		r.URL.Path = "_output/" + subDomain + "/index.html"
-		r.RequestURI = ""
-
-		originServerResponse, err := http.DefaultClient.Do(r)
+		targetURL, err := url.Parse(target)
 		if err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(rw, err)
+			http.Error(rw, "Failed to parse target URL", http.StatusInternalServerError)
+			fmt.Fprintln(os.Stderr, "Error parsing target URL:", err)
 			return
 		}
 
-		rw.WriteHeader(http.StatusOK)
-		io.Copy(rw, originServerResponse.Body)
+		fmt.Println("Proxying request to:", targetURL)
+
+		proxy := httputil.NewSingleHostReverseProxy(targetURL)
+		proxy.Director = func(req *http.Request) {
+			req.URL.Scheme = targetURL.Scheme
+			req.URL.Host = targetURL.Host
+			req.URL.Path = targetURL.Path
+			req.URL.RawQuery = targetURL.RawQuery
+			req.Host = targetURL.Host
+		}
+
+		proxy.ServeHTTP(rw, r)
 	})
 
-	fmt.Println("reverse proxy running on PORT:8000")
+	fmt.Println("Reverse proxy running on PORT: 8000")
 	err = http.ListenAndServe(":8000", nil)
-	checkErr(err)
+	checkErr(err, true)
 }
