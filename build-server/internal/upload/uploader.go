@@ -66,10 +66,8 @@ func (bucket Bucket) uploadFile(
 	}
 
 	fmt.Printf(
-		"Successfully uploaded file %s to bucket %s with key %s\n",
+		"Successfully uploaded file %s",
 		fPath,
-		bucketName,
-		objectKey,
 	)
 
 	return nil
@@ -129,11 +127,6 @@ func uploadProject(rootDir string) {
 			fname = "assets/" + fname
 		}
 
-		if fname == "index.html" {
-			pId := os.Getenv("PROJECT_ID")
-			updateHTMLPaths(fp, pId)
-		}
-
 		fmt.Println("\n\nuploading", fname+"...")
 
 		bucket.uploadFile(context.TODO(), fp, fname, fileExt)
@@ -141,19 +134,17 @@ func uploadProject(rootDir string) {
 	}
 }
 
-func updateHTMLPaths(filePath string, pid string) error {
+func updateBuildPath(filePath string, pid string) error {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to read index.html: %w", err)
 	}
 
-	// Replace asset paths to include _output/p1
-	updatedContent := strings.ReplaceAll(string(content), "/assets/", "/_output/"+pid+"/assets/")
-
-	updatedContent = strings.ReplaceAll(
-		string(updatedContent),
-		"/vite.svg",
-		"/_output/"+pid+"/vite.svg",
+	// Replace base path to _output/{pId}
+	updatedContent := strings.ReplaceAll(
+		string(content),
+		"vite build",
+		"vite build --base=/_output/"+pid+"/",
 	)
 
 	err = os.WriteFile(filePath, []byte(updatedContent), 0644)
@@ -166,6 +157,13 @@ func updateHTMLPaths(filePath string, pid string) error {
 
 func buildProject(rootDir string) {
 	fmt.Println("\ninstalling packages...")
+
+	pId := os.Getenv("PROJECT_ID")
+	/*
+	   we are changing the vite build to vite build --base="/_output/{pId}/ since thats
+	   our nested path of static files in S3 bucket
+	*/
+	updateBuildPath(rootDir+"/output/package.json", pId)
 
 	// npm install
 	iCmd := exec.Command("npm", "install")

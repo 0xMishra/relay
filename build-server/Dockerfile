@@ -25,6 +25,8 @@ WORKDIR /home/app
 # Copy application files
 COPY . .
 
+RUN go mod tidy
+
 # Ensure the script is executable
 RUN chmod +x script.sh
 
