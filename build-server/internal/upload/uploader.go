@@ -18,6 +18,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+const BUCKET_URL = ""
+
 type Bucket struct {
 	S3Client *s3.Client
 }
@@ -134,36 +136,8 @@ func uploadProject(rootDir string) {
 	}
 }
 
-func updateBuildPath(filePath string, pid string) error {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read index.html: %w", err)
-	}
-
-	// Replace base path to _output/{pId}
-	updatedContent := strings.ReplaceAll(
-		string(content),
-		"vite build",
-		"vite build --base=/_output/"+pid+"/",
-	)
-
-	err = os.WriteFile(filePath, []byte(updatedContent), 0644)
-	if err != nil {
-		return fmt.Errorf("failed to update index.html: %w", err)
-	}
-
-	return nil
-}
-
 func buildProject(rootDir string) {
 	fmt.Println("\ninstalling packages...")
-
-	pId := os.Getenv("PROJECT_ID")
-	/*
-	   we are changing the vite build to vite build --base="/_output/{pId}/ since thats
-	   our nested path of static files in S3 bucket
-	*/
-	updateBuildPath(rootDir+"/output/package.json", pId)
 
 	// npm install
 	iCmd := exec.Command("npm", "install")

@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
@@ -48,24 +48,21 @@ func main() {
 		}
 
 		targetURL, err := url.Parse(target)
-		if err != nil {
-			http.Error(rw, "Failed to parse target URL", http.StatusInternalServerError)
-			fmt.Fprintln(os.Stderr, "Error parsing target URL:", err)
-			return
+		checkErr(err, true)
+
+		resp, err := http.Get(targetURL.String())
+		checkErr(err, true)
+
+		for key, value := range resp.Header {
+			rw.Header()[key] = value
 		}
 
-		fmt.Println("Proxying request to:", targetURL)
+		rw.WriteHeader(resp.StatusCode)
 
-		proxy := httputil.NewSingleHostReverseProxy(targetURL)
-		proxy.Director = func(req *http.Request) {
-			req.URL.Scheme = targetURL.Scheme
-			req.URL.Host = targetURL.Host
-			req.URL.Path = targetURL.Path
-			req.URL.RawQuery = targetURL.RawQuery
-			req.Host = targetURL.Host
-		}
+		_, err = io.Copy(rw, resp.Body)
+		checkErr(err, false)
 
-		proxy.ServeHTTP(rw, r)
+		defer resp.Body.Close()
 	})
 
 	fmt.Println("Reverse proxy running on PORT: 8000")
