@@ -16,9 +16,28 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/go-redis/redis/v8"
 )
 
 const BUCKET_URL = ""
+
+var (
+	rdb *redis.Client
+	ctx = context.Background()
+)
+
+func checkErr(err error) {
+	if err != nil {
+		log.Fatal(err)
+		publishRedisLog(err.Error())
+	}
+}
+
+func publishRedisLog(log string) {
+	pid := os.Getenv("PROJECT_ID")
+	ctx = context.Background()
+	rdb.Publish(ctx, "log:"+pid, log)
+}
 
 type Bucket struct {
 	S3Client *s3.Client
@@ -64,25 +83,27 @@ func (bucket Bucket) uploadFile(
 	})
 	if err != nil {
 		log.Printf("Error while uploading object to %s. %s\n", bucketName, err)
+		publishRedisLog(fmt.Sprintf("Error while uploading object to %s. %s\n", bucketName, err))
 		return err
 	}
 
 	fmt.Printf(
-		"Successfully uploaded file %s",
+		"Successfully uploaded file %s\n",
 		fPath,
+	)
+	publishRedisLog(
+		"Successfully uploaded file" + fPath,
 	)
 
 	return nil
 }
 
-func checkErr(err error) {
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(1)
-	}
-}
-
 func Init() {
+	redisUrl := os.Getenv("REDIS_URl")
+	rdb = redis.NewClient(&redis.Options{
+		Addr: redisUrl,
+		DB:   0,
+	})
 	rootDir, getRootErr := os.Getwd()
 	checkErr(getRootErr)
 
@@ -96,6 +117,7 @@ func uploadProject(rootDir string) {
 	readDistErr := filepath.Walk(rootDir+"/output"+"/dist",
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
+				publishRedisLog(err.Error())
 				return err
 			}
 
@@ -129,15 +151,16 @@ func uploadProject(rootDir string) {
 			fname = "assets/" + fname
 		}
 
-		fmt.Println("\n\nuploading", fname+"...")
+		fmt.Println("\nuploading", fname+"...")
+		publishRedisLog("\nuploading" + fname + "...")
 
 		bucket.uploadFile(context.TODO(), fp, fname, fileExt)
-
 	}
 }
 
 func buildProject(rootDir string) {
 	fmt.Println("\ninstalling packages...")
+	publishRedisLog("\ninstalling packages...")
 
 	// npm install
 	iCmd := exec.Command("npm", "install")
@@ -149,6 +172,7 @@ func buildProject(rootDir string) {
 	checkErr(runICmdErr)
 
 	fmt.Println("\nbuilding the project...")
+	publishRedisLog("\nbuilding the project...")
 
 	// npm run build
 	bCmd := exec.Command("npm", "run", "build")
@@ -160,4 +184,5 @@ func buildProject(rootDir string) {
 	checkErr(runBCmdErr)
 
 	fmt.Println("build successful")
+	publishRedisLog("build successful")
 }
