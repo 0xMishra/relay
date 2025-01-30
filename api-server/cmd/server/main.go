@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/Pallinder/go-randomdata"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -36,6 +37,8 @@ var (
 	awsAccKeyId  = os.Getenv("AWS_ACCESS_KEY_ID")
 	awsSecAccKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
 	redisUrl     = os.Getenv("REDIS_URL")
+
+	revProxyUrl = os.Getenv("REVERSE_PROXY_URL")
 )
 
 func ecsConfig(gitInfo Gitinfo, pId string) {
@@ -80,7 +83,7 @@ func ecsConfig(gitInfo Gitinfo, pId string) {
 							Name:  aws.String("AWS_SECRET_ACCESS_KEY"),
 							Value: aws.String(awsSecAccKey),
 						},
-						{Name: aws.String("REDIS_URl"), Value: aws.String(redisUrl)},
+						{Name: aws.String("REDIS_URL"), Value: aws.String(redisUrl)},
 					},
 				},
 			},
@@ -124,16 +127,20 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
+	addr, err := redis.ParseURL(redisUrl)
 	checkErr(err, false)
-	rdb = redis.NewClient(&redis.Options{
-		Addr: redisUrl,
-	})
+
+	rdb = redis.NewClient(addr)
+
+	err = rdb.Ping(ctx).Err()
+	checkErr(err, false)
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /project", runEcsTaskHandler)
 
-	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/ws/{id}", func(w http.ResponseWriter, r *http.Request) {
+		pId = strings.Split(r.URL.Path, "/")[2]
 		// establishing a socket connection
 		conn, err := upgrader.Upgrade(w, r, nil)
 		checkErr(err, false)
@@ -147,7 +154,7 @@ func main() {
 		sub := rdb.Subscribe(ctx, "log:"+pId)
 		ch := sub.Channel()
 
-		fmt.Println(pId, sub, ch)
+		fmt.Println("Subscribed to channel: "+"log:"+pId+",", sub)
 
 		defer sub.Close()
 
@@ -162,7 +169,7 @@ func main() {
 	})
 
 	fmt.Println("api server running on PORT:3000")
-	http.ListenAndServe("localhost:3000", mux)
+	http.ListenAndServe(":3000", mux)
 }
 
 func runEcsTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +187,7 @@ func runEcsTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	res := ResBody{
 		Status: "queued",
-		Url:    "http://" + pId + ".localhost:8000",
+		Url:    pId + "." + revProxyUrl,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

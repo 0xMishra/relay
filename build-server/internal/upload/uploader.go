@@ -82,28 +82,35 @@ func (bucket Bucket) uploadFile(
 		ContentType: &mimetype,
 	})
 	if err != nil {
-		log.Printf("Error while uploading object to %s. %s\n", bucketName, err)
-		publishRedisLog(fmt.Sprintf("Error while uploading object to %s. %s\n", bucketName, err))
+		log.Printf("Error while uploading %s, %s\n", fileName, err)
+		publishRedisLog(fmt.Sprintf("Error while uploading %s, %s\n", fileName, err))
 		return err
 	}
 
 	fmt.Printf(
 		"Successfully uploaded file %s\n",
-		fPath,
+		fileName,
 	)
 	publishRedisLog(
-		"Successfully uploaded file" + fPath,
+		"Successfully uploaded file" + fileName,
 	)
+
+	fmt.Printf("deployment successful")
+	publishRedisLog("deployment successful")
 
 	return nil
 }
 
 func Init() {
-	redisUrl := os.Getenv("REDIS_URl")
-	rdb = redis.NewClient(&redis.Options{
-		Addr: redisUrl,
-		DB:   0,
-	})
+	redisUrl := os.Getenv("REDIS_URL")
+	addr, err := redis.ParseURL(redisUrl)
+	checkErr(err)
+
+	rdb = redis.NewClient(addr)
+
+	err = rdb.Ping(ctx).Err()
+	checkErr(err)
+
 	rootDir, getRootErr := os.Getwd()
 	checkErr(getRootErr)
 
@@ -140,6 +147,9 @@ func uploadProject(rootDir string) {
 
 	bucket := Bucket{s3Svc}
 
+	fmt.Println("\ndeploying project...")
+	publishRedisLog("\ndeploying project...")
+
 	// uploading files one by one
 	for _, fp := range filePaths {
 		fArr := strings.Split(fp, "/")
@@ -151,8 +161,8 @@ func uploadProject(rootDir string) {
 			fname = "assets/" + fname
 		}
 
-		fmt.Println("\nuploading", fname+"...")
-		publishRedisLog("\nuploading" + fname + "...")
+		fmt.Println("\nuploading ", fname+"...")
+		publishRedisLog("\nuploading " + fname + "...")
 
 		bucket.uploadFile(context.TODO(), fp, fname, fileExt)
 	}
