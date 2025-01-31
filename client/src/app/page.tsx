@@ -31,20 +31,28 @@ export default function Home() {
       const pId = localStorage.getItem(gitUrl.trim());
 
       if (pId) {
-        let res = await axios.post(`http://${SERVER_URL}/project`, {
-          url: gitUrl.trim(),
-          pid: pId,
-        });
+        let res = await axios.post(
+          `http://${SERVER_URL}/project`,
+          {
+            url: gitUrl.trim(),
+            pid: pId,
+          },
+          { withCredentials: true },
+        );
         console.log(res.data);
         setDeploymenUrl(res.data.url);
         setSocket(new WebSocket(`ws://${SERVER_URL}/ws/${pId}`));
         return;
       }
 
-      let res = await axios.post(`http://${SERVER_URL}/project`, {
-        url: gitUrl.trim(),
-        pid: projectId,
-      });
+      let res = await axios.post(
+        `http://${SERVER_URL}/project`,
+        {
+          url: gitUrl.trim(),
+          pid: projectId,
+        },
+        { withCredentials: true },
+      );
       console.log(res.data);
       setDeploymenUrl(res.data.url);
       setSocket(new WebSocket(`ws://${SERVER_URL}/ws/${projectId}`));
@@ -70,6 +78,14 @@ export default function Home() {
           setIsDeployed(true);
         }
         setLogs((logs) => [...logs, msg.data]);
+      };
+
+      socket.onerror = (err) => {
+        console.error("WebSocket error:", err);
+        toast({
+          variant: "destructive",
+          description: "WebSocket connection failed.",
+        });
       };
 
       return () => socket.close();
