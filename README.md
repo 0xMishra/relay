@@ -1,3 +1,6 @@
+## Architecture
+![arch](https://github.com/user-attachments/assets/0b80ebaf-f3aa-4055-a87b-d931288f5452)
+
 ## How to run the project
 - Build the build-server docker image and push it to your AWS ECR
 - Go to your AWS console and create a new ECS cluster
