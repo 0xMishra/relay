@@ -102,6 +102,23 @@ func checkErr(err error, fatal bool) {
 	}
 }
 
+func setCorsHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			// setting up CORS policy
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+			// Handle preflight OPTIONS request
+			if r.Method == http.MethodOptions {
+				return
+			}
+			next.ServeHTTP(w, r)
+		},
+	)
+}
+
 type Gitinfo struct {
 	Url string `json:"url"`
 	Pid string `json:"pid"`
@@ -169,7 +186,8 @@ func main() {
 	})
 
 	fmt.Println("api server running on PORT:3000")
-	http.ListenAndServe(":3000", mux)
+	err = http.ListenAndServe(":3000", setCorsHeadersMiddleware(mux))
+	checkErr(err, true)
 }
 
 func runEcsTaskHandler(w http.ResponseWriter, r *http.Request) {

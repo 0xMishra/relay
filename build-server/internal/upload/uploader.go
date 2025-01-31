@@ -88,15 +88,12 @@ func (bucket Bucket) uploadFile(
 	}
 
 	fmt.Printf(
-		"Successfully uploaded file %s\n",
+		"Successfully uploaded %s\n",
 		fileName,
 	)
 	publishRedisLog(
-		"Successfully uploaded file" + fileName,
+		"Successfully uploaded " + fileName,
 	)
-
-	fmt.Printf("deployment successful")
-	publishRedisLog("deployment successful")
 
 	return nil
 }
@@ -166,6 +163,9 @@ func uploadProject(rootDir string) {
 
 		bucket.uploadFile(context.TODO(), fp, fname, fileExt)
 	}
+
+	fmt.Printf("deployment successful")
+	publishRedisLog("deployment successful")
 }
 
 func buildProject(rootDir string) {

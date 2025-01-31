@@ -3,17 +3,20 @@ import { LogTerminal } from "@/components/LogTerminal";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "@/hooks/use-toast";
 import axios from "axios";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
+import { generate } from "random-words";
 import { useEffect, useState } from "react";
 
 export default function Home() {
-  const SERVER_URL = process.env.SERVER_URL!;
   const [isLoading, setIsloading] = useState<boolean>(false);
   const [gitUrl, setGitUrl] = useState<string>("");
   const [isTermOpen, setIsTermOpen] = useState<boolean>(false);
-  const [projectId, setProjectId] = useState<string>("dummyId");
+  const [projectId, setProjectId] = useState<string>(generate() as string);
   const [logs, setLogs] = useState<string[]>(["setting up the server..."]);
+  const [deploymenUrl, setDeploymenUrl] = useState<string>("");
 
   async function deployProject() {
     try {
@@ -22,41 +25,49 @@ export default function Home() {
       const pId = localStorage.getItem(gitUrl.trim());
 
       if (pId) {
-        let res = await axios.post(`${SERVER_URL}/project`, {
+        let res = await axios.post(`http://localhost:3000/project`, {
           url: gitUrl,
           pid: pId,
         });
         console.log(res.data);
         setProjectId(res.data.url.split(".")[0]);
+        setDeploymenUrl(res.data.url);
         return;
       }
 
-      let res = await axios.post(`${SERVER_URL}/project`, {
+      let res = await axios.post(`http://localhost:3000/project`, {
         url: gitUrl,
       });
       console.log(res.data);
       setProjectId(res.data.url.split(".")[0]);
+      setDeploymenUrl(res.data.url);
 
       localStorage.setItem(gitUrl.trim(), projectId);
     } catch (error) {
       console.log(error);
+      setIsloading(false);
+      toast({ variant: "destructive", description: `${error}` });
     }
   }
 
   useEffect(() => {
-    const socket = new WebSocket(`${SERVER_URL}/${projectId}`);
+    const socket = new WebSocket(`ws://localhost:3000/ws/${projectId}`);
 
     socket.onopen = () => {
       console.log("connected to the server");
     };
 
     socket.onmessage = (msg) => {
-      console.log(msg);
+      console.log(msg.data);
+      if (msg.data === "deployment successful") {
+        toast({ variant: "default", description: `deployment successful` });
+        setIsloading(false);
+      }
       setLogs((logs) => [...logs, msg.data]);
     };
 
     return () => socket.close();
-  }, [projectId]);
+  }, []);
 
   return (
     <main className="bg-[#171717] h-screen w-screen">
@@ -75,7 +86,21 @@ export default function Home() {
               Deploy your react apps with just a click
             </p>
 
-            <div className="flex w-[100%] flex-col items-center justify-center p-2">
+            <div className="flex w-[100%] flex-col items-center justify-center p-4">
+              {deploymenUrl.length > 0 ? (
+                <Link
+                  href={`http://${deploymenUrl}`}
+                  target="_blank"
+                  className="text-[#989898] cursor-pointer text-xl pb-4"
+                >
+                  Queued deployment at
+                  <span className="hover:underline text-[#989898] ml-1 cursor-pointer text-xl">
+                    {deploymenUrl}
+                  </span>
+                </Link>
+              ) : (
+                <div className="text-white h-7 w-[100%] p-2 underline cursor-pointer text-xl"></div>
+              )}
               <Input
                 placeholder="Git repo URL"
                 className="w-[100%] text-white text-lg"

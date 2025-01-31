@@ -17,7 +17,7 @@ export const LogTerminal = ({
   return (
     <div className="relative bg-[#171717] text-white w-[100%]">
       <div
-        className={`fixed bottom-0 h-[50vh] md:right-0 md:top-[5.2rem] z-40 md:h-screen md:w-[70%] w-[100%] max-w-[768px] transform bg-[#171717] shadow-2xl ${
+        className={`fixed md:overflow-y-scroll md:pb-[5.2rem] overflow-x-hidden bottom-0 h-[50vh] md:right-0 md:top-[5.2rem] z-40 md:h-screen md:w-[70%] w-[100%] max-w-[768px] transform bg-[#171717] shadow-2xl ${
           isOpen ? "translate-x-0 " : "translate-x-full "
         } transition-transform duration-100 ease-in-out`}
       >
