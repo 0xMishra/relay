@@ -24,7 +24,9 @@ export default function Home() {
 
   async function deployProject() {
     try {
-      setIsloading(true);
+      if (gitUrl.length > 0) {
+        setIsloading(true);
+      }
       setLogs(["setting up the server..."]);
       setIsDeployed(false);
 
